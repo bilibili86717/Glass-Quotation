@@ -17,6 +17,7 @@ const state = {
   processes: {},   // { processId: { enabled: bool, fields: { fieldId: value } } }
   results: {},     // { processId: { cost, detail } }
   showTaxAndProfit: true,  // 税金/利润是否显示给客户看
+  showProcessDetails: true, // 是否显示工序详细参数（导出时用）
   totalCost: 0
 };
 
@@ -262,8 +263,13 @@ function renderResultPage() {
       </div>
 
       <div class="toggle-row">
-        <div class="toggle-label">${state.showTaxAndProfit ? '👁 显示成本/税金/利润（内部查看）' : '👁‍🗨 隐藏成本/税金/利润（客户只看报价）'}</div>
+        <div class="toggle-label">${state.showTaxAndProfit ? '👁 显示成本/税金/利润' : '👁‍🗨 隐藏成本/税金/利润'}</div>
         <div class="toggle-switch ${state.showTaxAndProfit ? 'on' : ''}" id="toggle-sensitive"></div>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-label">${state.showProcessDetails ? '📋 显示工序详细参数（导出用）' : '📋 隐藏工序详细参数（导出用）'}</div>
+        <div class="toggle-switch ${state.showProcessDetails ? 'on' : ''}" id="toggle-details"></div>
       </div>
 
       <div class="action-buttons">
@@ -302,16 +308,22 @@ function bindInputs() {
     // 结果页
     document.getElementById('toggle-sensitive').addEventListener('click', () => {
       state.showTaxAndProfit = !state.showTaxAndProfit;
-      // 只切换敏感行，无需重新渲染
       document.querySelectorAll('[data-sensitive="true"]').forEach(el => {
         el.classList.toggle('hidden-item', !state.showTaxAndProfit);
       });
       const toggleSwitch = document.getElementById('toggle-sensitive');
       toggleSwitch.classList.toggle('on', state.showTaxAndProfit);
       const toggleLabel = toggleSwitch.parentElement.querySelector('.toggle-label');
-      toggleLabel.textContent = state.showTaxAndProfit
-        ? '👁 显示成本/税金/利润（内部查看）'
-        : '👁‍🗨 隐藏成本/税金/利润（客户只看报价）';
+      toggleLabel.textContent = state.showTaxAndProfit ? '👁 显示成本/税金/利润' : '👁‍🗨 隐藏成本/税金/利润';
+    });
+    // 工序详细参数开关
+    document.getElementById('toggle-details').addEventListener('click', () => {
+      state.showProcessDetails = !state.showProcessDetails;
+      const toggleSwitch = document.getElementById('toggle-details');
+      toggleSwitch.classList.toggle('on', state.showProcessDetails);
+      const toggleLabel = toggleSwitch.parentElement.querySelector('.toggle-label');
+      toggleLabel.textContent = state.showProcessDetails ? '📋 显示工序详细参数（导出用）' : '📋 隐藏工序详细参数（导出用）';
+      showToast(state.showProcessDetails ? '📋 导出时将包含详细参数' : '📋 导出时将隐藏详细参数', '');
     });
     document.getElementById('btn-export-word').addEventListener('click', exportWord);
     document.getElementById('btn-export-pdf').addEventListener('click', exportPDF);
@@ -514,7 +526,7 @@ function saveToHistory() {
 }
 
 // ============================================
-// 导出 Word（用原生 Blob 生成 .doc 文件，无需外部库）
+// 导出 Word（生成 .docx 格式，手机/电脑均可打开）
 // ============================================
 function buildReportHTML(forWord = false) {
   recalcTotal();
@@ -523,34 +535,36 @@ function buildReportHTML(forWord = false) {
   const recommended = state.totalCost + tax + profit;
 
   let html = `
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/1999/xhtml'>
     <head><meta charset='utf-8'><title>玻璃报价单</title>
     <style>
-      body { font-family: '微软雅黑', 'Microsoft YaHei', Arial; font-size: 12pt; line-height: 1.6; padding: 30px; }
-      h1 { font-size: 22pt; text-align: center; color: #1d4ed8; margin-bottom: 20px; }
-      h2 { font-size: 14pt; color: #1f2937; border-bottom: 2px solid #2563eb; padding-bottom: 4px; margin-top: 20px; }
-      table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-      th, td { border: 1px solid #9ca3af; padding: 8px 12px; text-align: left; }
+      body { font-family: 'Microsoft YaHei', '微软雅黑', Arial; font-size: 12pt; line-height: 1.6; padding: 20px; }
+      h1 { font-size: 22pt; text-align: center; color: #1d4ed8; margin-bottom: 16px; }
+      h2 { font-size: 14pt; color: #1f2937; border-bottom: 2px solid #2563eb; padding-bottom: 4px; margin-top: 18px; }
+      h3 { font-size: 12pt; color: #374151; margin-top: 14px; margin-bottom: 6px; }
+      table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+      th, td { border: 1px solid #9ca3af; padding: 7px 10px; text-align: left; }
       th { background: #dbeafe; color: #1e40af; font-weight: bold; }
       .info-row td { background: #f9fafb; }
       .total-row td { background: #fef3c7; font-weight: bold; font-size: 13pt; }
       .recommend-row td { background: #10b981; color: white; font-weight: bold; font-size: 14pt; }
       .skipped { color: #9ca3af; text-decoration: line-through; }
       .cost { text-align: right; font-weight: 500; }
-      .hide { display: none; }
-      .big-price { font-size: 18pt; color: #059669; font-weight: bold; }
+      .header-info { text-align: right; color: #6b7280; font-size: 10pt; margin-bottom: 10px; }
     </style></head><body>
     <h1>玻璃产品报价单</h1>
-    <p style="text-align:right; color:#6b7280;">日期: ${new Date().toLocaleDateString('zh-CN')}</p>
+    <p class="header-info">日期: ${new Date().toLocaleDateString('zh-CN')} &nbsp; 报价编号: ${Date.now().toString().slice(-8)}</p>
     <h2>客户信息</h2>
-    <table><tr><td>客户名称</td><td>${state.customer.name || '—'}</td><td>项目名称</td><td>${state.customer.project || '—'}</td></tr></table>
+    <table>
+      <tr><td style="width:20%;background:#f0f9ff;font-weight:bold;">客户名称</td><td>${state.customer.name || '—'}</td><td style="width:20%;background:#f0f9ff;font-weight:bold;">项目名称</td><td>${state.customer.project || '—'}</td></tr>
+    </table>
     <h2>产品规格</h2>
     <table>
-      <tr><td>产品长度</td><td>${state.product.length} mm</td><td>产品宽度</td><td>${state.product.width} mm</td></tr>
-      <tr><td>产品层数</td><td>${state.product.layers}</td><td>产品数量</td><td>${state.product.quantity} 块</td></tr>
+      <tr><td style="width:20%;background:#f0f9ff;font-weight:bold;">产品长度</td><td>${state.product.length} mm</td><td style="width:20%;background:#f0f9ff;font-weight:bold;">产品宽度</td><td>${state.product.width} mm</td></tr>
+      <tr><td style="background:#f0f9ff;font-weight:bold;">产品层数</td><td>${state.product.layers}</td><td style="background:#f0f9ff;font-weight:bold;">产品数量</td><td>${state.product.quantity} 块</td></tr>
     </table>
     <h2>工序成本明细</h2>
-    <table><tr><th style="width:60%">工序</th><th style="width:40%; text-align:right;">每块成本（元）</th></tr>
+    <table><tr><th style="width:60%;">工序名称</th><th style="width:40%;text-align:right;">每块成本（元）</th></tr>
   `;
   PROCESSES.forEach(p => {
     const r = state.results[p.id];
@@ -571,54 +585,75 @@ function buildReportHTML(forWord = false) {
   html += `<tr class="total-row"><td>📦 整批总价（× ${state.product.quantity} 块）</td><td class="cost">${yuan(recommended * state.product.quantity)}</td></tr>`;
   html += `</table>`;
 
-  // 详细参数
-  html += `<h2>详细参数（各工序）</h2>`;
-  PROCESSES.forEach(p => {
-    if (!state.processes[p.id].enabled) return;
-    html += `<h3>${p.icon} ${p.name}</h3><table>`;
-    p.fields.forEach(f => {
-      html += `<tr><td>${f.label}</td><td class="cost">${state.processes[p.id].fields[f.id]} ${f.unit || ''}</td></tr>`;
-    });
-    const r = state.results[p.id];
-    if (r && r.detail) {
-      Object.entries(r.detail).forEach(([k, v]) => {
-        html += `<tr class="info-row"><td>${k}</td><td class="cost">${typeof v === 'number' ? fmt(v) : v}</td></tr>`;
+  // 工序详细参数（根据开关决定是否显示）
+  if (state.showProcessDetails) {
+    html += `<h2>工序详细参数</h2>`;
+    PROCESSES.forEach(p => {
+      if (!state.processes[p.id].enabled) return;
+      html += `<h3>${p.icon} ${p.name}</h3><table>`;
+      p.fields.forEach(f => {
+        html += `<tr><td style="background:#f9fafb;">${f.label}</td><td class="cost">${state.processes[p.id].fields[f.id]} ${f.unit || ''}</td></tr>`;
       });
-    }
-    html += `</table>`;
-  });
+      const r = state.results[p.id];
+      if (r && r.detail) {
+        Object.entries(r.detail).forEach(([k, v]) => {
+          html += `<tr><td style="background:#fef9c3;">${k}</td><td class="cost">${typeof v === 'number' ? fmt(v) : v}</td></tr>`;
+        });
+      }
+      html += `</table>`;
+    });
+  }
 
-  html += `<p style="margin-top:30px; color:#6b7280; font-size:10pt; text-align:center;">本报价由玻璃成本报价系统生成 · 仅供参考 · 最终成交价以合同为准</p>`;
+  html += `<p style="margin-top:30px; color:#9ca3af; font-size:10pt; text-align:center;">本报价由玻璃成本报价系统生成 · 仅供参考 · 最终成交价以合同为准</p>`;
   html += `</body></html>`;
   return html;
 }
 
 function exportWord() {
   const html = buildReportHTML(true);
-  const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' });
+  const fileName = `玻璃报价单_${state.customer.name || '客户'}_${new Date().toISOString().slice(0,10)}.docx`;
+  const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  const fileName = `玻璃报价单_${state.customer.name || '客户'}_${new Date().toISOString().slice(0,10)}.doc`;
   a.download = fileName;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 100);
+  setTimeout(() => URL.revokeObjectURL(url), 200);
   showToast('📄 Word 已导出', 'success');
 }
 
 // ============================================
-// 导出 PDF（用打印 + 浏览器另存为 PDF）
+// 导出 PDF（在新窗口显示，支持返回按钮）
 // ============================================
 function exportPDF() {
   const html = buildReportHTML(false);
   const w = window.open('', '_blank');
-  w.document.write(html);
+  if (!w) {
+    showToast('请允许弹出窗口', 'error');
+    return;
+  }
+  w.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>玻璃报价单 - ${state.customer.name || '客户'}</title>
+      <style>
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; }
+        @media print { .no-print { display: none !important; } }
+      </style>
+    </head>
+    <body>
+      ${html.replace('</body></html>', '')}
+      <div class="no-print" style="position:fixed;bottom:20px;right:20px;z-index:9999;">
+        <button onclick="window.print();" style="padding:12px 24px;background:#2563eb;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.2);margin-right:8px;">🖨️ 打印 / 保存 PDF</button>
+        <button onclick="window.close();" style="padding:12px 24px;background:#6b7280;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.2);">← 返回报价系统</button>
+      </div>
+    </body>
+    </html>
+  `);
   w.document.close();
-  setTimeout(() => {
-    w.focus();
-    w.print();
-  }, 400);
-  showToast('已打开打印窗口，选择"另存为 PDF"', 'success');
+  showToast('📑 点击按钮打印或保存 PDF', 'success');
 }
 
 // ============================================
